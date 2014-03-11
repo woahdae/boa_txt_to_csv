@@ -8,6 +8,8 @@ if ARGV[0].nil?
 end
 
 DATE_MATCH = /[0-9]{2}\/[0-9]{2}/
+DESCRIPTION_MATCH = /[A-Z0-9'.,()&#\- _]{22}/
+DESCRIPTION2_MATCH = /[A-Z0-9#\- _]{13}/
 STARTS_WITH_DATE_MATCH = /^ +?#{DATE_MATCH}/
 
 def match_indexes(string, regex)
@@ -20,29 +22,16 @@ end
 
 def parse(row1, row2 = nil)
   return if !row1.match(/^ +#{DATE_MATCH} +#{DATE_MATCH} +/)
+  return if row1.match(/Interest Charged on/)
 
-  description_start, _ =
-    *(match_indexes(row1, /^ +#{DATE_MATCH} +#{DATE_MATCH} +([A-Z0-9#\- _]+)/ )[0])
-  description_end = description_start + 22
-
-  city_start = description_start + 23
-  city_end = city_start + 12
-
-  tx_date, post_date = *row1.match(/^ +(#{DATE_MATCH}) +(#{DATE_MATCH}) +/).captures
-  description1 = row1[ description_start...description_end ].strip
-  city         = row1[ city_start...city_end ].strip
-
-  return if tx_date.empty?
-  return if description1.match(/Interest Charged on/)
-
-  state, ref_no, acct_no, amount =
-    *row1.match(/([A-Z]{2}) +([0-9]+) +([0-9]+) +([0-9.,]+)$/).captures
+  tx_date, post_date, description1, city, state, ref_no, acct_no, amount =
+    *row1.match(/^ +(#{DATE_MATCH}) +(#{DATE_MATCH}) +(#{DESCRIPTION_MATCH}) (#{DESCRIPTION2_MATCH}) ?([A-Z]{2}) +([0-9]+) +([0-9]+) +([0-9.,]+)$/).captures
 
   if row2 && match = row2.match(/^ {33}([A-Z0-9#\-]+?)$/)
     description2 = match.captures.first
   end
 
-  [tx_date, post_date, description1, description2, city, state, ref_no, acct_no, amount]
+  [tx_date, post_date, description1, description2, city, state, ref_no, acct_no, amount].map {|e| e.strip if e}
 end
 
 CSV {|out| out << ["TX Date", "Post Date", "Description", "Description 2",
