@@ -8,8 +8,10 @@ if ARGV[0].nil?
 end
 
 DATE_MATCH = /[0-9]{2}\/[0-9]{2}/
-DESCRIPTION_MATCH = /[A-Z0-9'.,()&#\- _]{22}/
-DESCRIPTION2_MATCH = /[A-Z0-9#\- _]{13}/
+DESCRIPTION_MATCH = /[[:print:]]{22}/
+DESCRIPTION2_MATCH = /[[:print:]]{13}/
+LATE_FEE_DESCRIPTION_MATCH = /[[:print:]]{50}/
+AMOUNT_MATCH = /[0-9.,]+/
 STARTS_WITH_DATE_MATCH = /^ +?#{DATE_MATCH}/
 
 def match_indexes(string, regex)
@@ -24,8 +26,13 @@ def parse(row1, row2 = nil)
   return if !row1.match(/^ +#{DATE_MATCH} +#{DATE_MATCH} +/)
   return if row1.match(/Interest Charged on/)
 
-  tx_date, post_date, description1, city, state, ref_no, acct_no, amount =
-    *row1.match(/^ +(#{DATE_MATCH}) +(#{DATE_MATCH}) +(#{DESCRIPTION_MATCH}) (#{DESCRIPTION2_MATCH}) ?([A-Z]{2}) +([0-9]+) +([0-9]+) +([0-9.,]+)$/).captures
+  if row1.match('LATE FEE FOR PAYMENT DUE')
+    tx_date, post_date, description1, ref_no, amount =
+      *row1.match(/^ +(#{DATE_MATCH}) +(#{DATE_MATCH}) +(#{LATE_FEE_DESCRIPTION_MATCH}) +([0-9]+) +(#{AMOUNT_MATCH})$/).captures
+  else
+    tx_date, post_date, description1, city, state, ref_no, acct_no, amount =
+      *row1.match(/^ +(#{DATE_MATCH}) +(#{DATE_MATCH}) +(#{DESCRIPTION_MATCH}) (#{DESCRIPTION2_MATCH}) ?([A-Z]{2}) +([0-9]+) +([0-9]+) +(#{AMOUNT_MATCH})$/).captures
+  end
 
   if row2 && match = row2.match(/^ {33}([A-Z0-9#\-]+?)$/)
     description2 = match.captures.first
