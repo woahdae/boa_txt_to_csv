@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'csv'
+require 'pry'
 
 if ARGV[0].nil?
   puts "Usage: #{__FILE__} path/to/input.txt > output.csv"
@@ -14,50 +15,47 @@ LATE_FEE_DESCRIPTION_MATCH = /[[:print:]]{50}/
 AMOUNT_MATCH = /[0-9.,]+/
 STARTS_WITH_DATE_MATCH = /^ +?#{DATE_MATCH}/
 
-def match_indexes(string, regex)
-  matches = string.match(regex)
+PLACES = ['GIG HARBOR', 'PORT ORCHARD', 'UNIVERSITY P', 'NEW YORK']
 
-  (1...matches.length).map do |index|
-    [matches.begin(index), matches.end(index) - 1]
+def parse(row)
+  return if row.empty?
+
+  amount, credit = *row.match(/([\d,]{1,}\.\d{2})(CR)?$/).captures
+
+  city ||= PLACES.find {|p| row.include?(p)}
+  comma_match = row.match(/ ([^ ]+),([^ ]+) #{amount}/)
+  if comma_match
+    city2, state = *comma_match.captures
   end
+  city ||= city2
+  begin
+    city = row.match(/([^ ]+?) #{amount}/).captures.first if !city
+  rescue
+    binding.pry
+    raise
+  end
+
+  amount = "-#{amount}" if credit
+
+  date = row.match(/^([^ ]+) /).captures.first
+
+  begin
+    description = row.match(/^[^ ]+? (.+?) #{city}/).captures.first
+  rescue
+    binding.pry
+    raise
+  end
+
+  [date, description, city, state, amount].map {|e| e.strip if e}
 end
 
-def parse(row1, row2 = nil)
-  return if !row1.match(/^ +#{DATE_MATCH} +#{DATE_MATCH} +/)
-  return if row1.match(/Interest Charged on/)
-
-  if row1.match('LATE FEE FOR PAYMENT DUE')
-    tx_date, post_date, description1, ref_no, amount =
-      *row1.match(/^ +(#{DATE_MATCH}) +(#{DATE_MATCH}) +(#{LATE_FEE_DESCRIPTION_MATCH}) +([0-9]+) +(#{AMOUNT_MATCH})$/).captures
-  else
-    tx_date, post_date, description1, city, state, ref_no, acct_no, amount =
-      *row1.match(/^ +(#{DATE_MATCH}) +(#{DATE_MATCH}) +(#{DESCRIPTION_MATCH}) (#{DESCRIPTION2_MATCH}) ?([A-Z]{2}) +([0-9]+) +([0-9]+) +(#{AMOUNT_MATCH})$/).captures
-  end
-
-  if row2 && match = row2.match(/^ {33}([A-Z0-9#\-]+?)$/)
-    description2 = match.captures.first
-  end
-
-  [tx_date, post_date, description1, description2, city, state, ref_no, acct_no, amount].map {|e| e.strip if e}
-end
-
-CSV {|out| out << ["TX Date", "Post Date", "Description", "Description 2",
-                   "City", "State", "Reference #", "Account #", "Amount"]}
+CSV {|out| out << ["Date", "Description", "City", "State", "Amount"]}
 
 file = File.read(ARGV[0])
 file.encode!('UTF-8', 'UTF-8', invalid: :replace, replace: '')
 
-file.gsub(/[\r\n]+/, "\n").lines.inject("") do |previous_row, current_row|
-  next current_row if previous_row.empty?
+file.gsub(/[\r\n]+/, "\n").lines do |row|
+  next if row.empty?
 
-  if previous_row.match(STARTS_WITH_DATE_MATCH)
-    if current_row.match(STARTS_WITH_DATE_MATCH) # two csv rows of data
-      CSV {|out| row = parse(previous_row); out << row if row}
-      CSV {|out| row = parse(current_row); out << row if row}
-    else # one row of data taking up two physical rows
-      CSV {|out| row = parse(previous_row, current_row); out << row if row}
-    end
-  end
-
-  ""
+  CSV {|out| out << parse(row)}
 end
